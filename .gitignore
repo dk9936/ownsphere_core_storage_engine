@@ -1,0 +1,7 @@
+build/
+*.o
+*.out
+*.log
+data/chunks/*
+data/metadata/*
+.vscode/
