@@ -7,6 +7,13 @@ import (
 	"os"
 	"os/exec"
 )
+func runCommand(args ...string) (string, error) {
+    cmd := exec.Command("/Users/apple/Documents/maxwell/ownsphere_core_storage_engine/build/engine", args...)
+    cmd.Dir = "/Users/apple/Documents/maxwell/ownsphere_core_storage_engine"
+
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(10 << 20) // 10MB
@@ -46,16 +53,6 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprintln(w, output)
-}
-
-func runCommand(args ...string) (string, error) {
-	cmd := exec.Command("/home/maxwell/ownsphere_core_storage_engine/build/engine", args...)
-
-	// ✅ CRITICAL: set working directory to project root
-	cmd.Dir = "/home/maxwell/ownsphere_core_storage_engine"
-
-	output, err := cmd.CombinedOutput()
-	return string(output), err
 }
 
 func storeHandler(w http.ResponseWriter, r *http.Request) {

@@ -2,14 +2,21 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <filesystem>
 
 // ================= SAVE METADATA =================
-void MetadataManager::saveMetadata(const std::string &fileId,
+bool MetadataManager::saveMetadata(const std::string &fileId,
                                    const std::vector<ChunkInfo> &chunks,
                                    size_t size)
 {
+    std::filesystem::create_directories("data/metadata");
 
     std::ofstream out("data/metadata/" + fileId + ".meta");
+    if (!out.is_open())
+    {
+        std::cerr << "ERROR: Cannot write metadata for file: " << fileId << std::endl;
+        return false;
+    }
 
     out << "{\n";
     out << "\"file_id\": \"" << fileId << "\",\n";
@@ -27,6 +34,7 @@ void MetadataManager::saveMetadata(const std::string &fileId,
     }
 
     out << "]\n}";
+    return true;
 }
 
 // ================= LOAD METADATA =================

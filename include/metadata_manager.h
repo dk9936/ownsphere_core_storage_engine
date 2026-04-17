@@ -1,16 +1,12 @@
 #pragma once
 #include <string>
 #include <vector>
-
-struct ChunkInfo {
-    std::string id;
-    std::string checksum;
-};
+#include "models/chunk_info.h"
 
 
 class MetadataManager {
 public:
-    void saveMetadata(const std::string& fileId,
+    bool saveMetadata(const std::string& fileId,
                       const std::vector<ChunkInfo>& chunks,
                       size_t size);
 
