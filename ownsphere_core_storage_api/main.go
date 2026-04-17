@@ -7,9 +7,10 @@ import (
 	"os"
 	"os/exec"
 )
+
 func runCommand(args ...string) (string, error) {
-    cmd := exec.Command("/Users/apple/Documents/maxwell/ownsphere_core_storage_engine/build/engine", args...)
-    cmd.Dir = "/Users/apple/Documents/maxwell/ownsphere_core_storage_engine"
+	cmd := exec.Command("/Users/apple/Documents/maxwell/ownsphere_core_storage_engine/build/engine", args...)
+	cmd.Dir = "/Users/apple/Documents/maxwell/ownsphere_core_storage_engine"
 
 	output, err := cmd.CombinedOutput()
 	return string(output), err

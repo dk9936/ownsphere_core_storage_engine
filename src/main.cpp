@@ -1,4 +1,7 @@
 #include "storage_engine.h"
+#include "metadata_manager.h"
+#include "logger.h"
+
 #include <iostream>
 #include <limits>
 
@@ -30,14 +33,30 @@ void showProgress(int percent) {
 
 // ======================= MAIN =======================
 int main() {
+    // ✅ Init logger FIRST
+    Logger::init("logs/app.log");
+    LOG_INFO("Application started");
+
     StorageEngine engine;
+
+    // ✅ Cleanup temp metadata from previous crash
+    MetadataManager().cleanupTempFiles();
+    LOG_INFO("Temporary metadata cleanup completed");
+
     int choice;
 
     while (true) {
         showMenu();
-        std::cin >> choice;
 
-        // Clear newline from buffer (important for getline)
+        if (!(std::cin >> choice)) {
+            LOG_ERROR("Invalid input detected");
+            std::cout << "❌ Invalid input\n";
+
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+        }
+
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         // ================= STORE =================
@@ -50,10 +69,14 @@ int main() {
             std::cout << "Enter file ID: ";
             std::getline(std::cin, fileId);
 
+            LOG_INFO("Store request: fileId=" + fileId + ", path=" + filePath);
+
             if (engine.storeFile(filePath, fileId, showProgress)) {
                 std::cout << "\n✅ File stored\n";
+                LOG_INFO("File stored successfully: " + fileId);
             } else {
                 std::cout << "\n❌ Failed to store file\n";
+                LOG_ERROR("Failed to store file: " + fileId);
             }
         }
 
@@ -67,24 +90,32 @@ int main() {
             std::cout << "Enter output path: ";
             std::getline(std::cin, outputPath);
 
+            LOG_INFO("Retrieve request: fileId=" + fileId + ", output=" + outputPath);
+
             if (engine.retrieveFile(fileId, outputPath, showProgress)) {
                 std::cout << "\n✅ File retrieved\n";
+                LOG_INFO("File retrieved successfully: " + fileId);
             } else {
                 std::cout << "\n❌ Failed to retrieve file\n";
+                LOG_ERROR("Failed to retrieve file: " + fileId);
             }
         }
 
         // ================= LIST =================
         else if (choice == 3) {
+            LOG_INFO("List files request");
+
             auto files = engine.listFiles();
 
             if (files.empty()) {
                 std::cout << "No files stored.\n";
+                LOG_INFO("No files found");
             } else {
                 std::cout << "Stored files:\n";
                 for (const auto& f : files) {
                     std::cout << "  - " << f << "\n";
                 }
+                LOG_INFO("Listed files count: " + std::to_string(files.size()));
             }
         }
 
@@ -95,21 +126,27 @@ int main() {
             std::cout << "Enter file ID: ";
             std::getline(std::cin, fileId);
 
+            LOG_INFO("Delete request: fileId=" + fileId);
+
             if (engine.deleteFile(fileId)) {
                 std::cout << "✅ File deleted\n";
+                LOG_INFO("File deleted: " + fileId);
             } else {
                 std::cout << "❌ Failed to delete file\n";
+                LOG_ERROR("Failed to delete file: " + fileId);
             }
         }
 
         // ================= EXIT =================
         else if (choice == 5) {
+            LOG_INFO("Application shutting down");
             std::cout << "Exiting...\n";
             break;
         }
 
         // ================= INVALID =================
         else {
+            LOG_ERROR("Invalid menu option selected");
             std::cout << "❌ Invalid option\n";
         }
     }

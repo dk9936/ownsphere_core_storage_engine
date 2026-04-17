@@ -11,4 +11,5 @@ public:
                       size_t size);
 
     std::vector<ChunkInfo> loadChunks(const std::string& fileId);
+    void cleanupTempFiles();
 };

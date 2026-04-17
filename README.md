@@ -1,226 +1,120 @@
-# OwnSphere Storage Engine 🚀
+# 🚀 OwnSphere Storage Engine
 
-A high-performance, distributed storage system inspired by NAS solutions like Synology.
+OwnSphere is a high-performance storage system built from scratch, inspired by modern object storage and NAS systems.
 
-## 🧱 Architecture Overview
+The project focuses on building core storage fundamentals such as chunking, data integrity, and failure handling, with a long-term goal of evolving into a distributed storage system.
+
+---
+
+## 🧠 Overview
+
+OwnSphere is designed with a layered architecture:
+
+- **C++ Core Engine** → Handles storage, chunking, and data integrity
+- **Go Agent Layer** → Provides API interface and communication
+
+This separation ensures:
+- High performance (C++)
+- Easy integration and scalability (Go)
+
+---
+
+## ✨ Features
 
 ### 🔧 Core Storage Engine (C++)
-
-Handles:
-
-* File chunking
-* RAID logic (striping, mirroring - WIP)
-* Encryption/Decryption (AES / ChaCha20 - planned)
-* Disk I/O operations
-
-### 🌐 Agent Layer (Go)
-
-Handles:
-
-* Communication with backend services
-* File upload/download APIs
-* Chunk management
-* Health monitoring
+- File chunking (fixed-size chunks)
+- Metadata management
+- Checksum-based data integrity
+- Basic encryption/decryption layer
+- Atomic metadata writes (crash-safe)
+- Rollback on failure (prevents partial writes)
+- File reconstruction from chunks
+- File listing and deletion
+- Progress tracking
 
 ---
 
-## ✅ What We Have Achieved
-
-* ✔️ Initial project setup (C++ + Go)
-* ✔️ Basic file handling (read/write)
-* ✔️ Agent service setup in Go
-* ✔️ API structure defined
-* ✔️ Local environment setup (Linux)
-* ✔️ PostgreSQL removed & environment cleaned
-* ✔️ Go installed using official binaries
-* ✔️ Basic testing workflow established
+### 🧪 Testing & Quality
+- Unit testing using GoogleTest
+- Integration testing (store/retrieve/delete)
+- Failure testing (missing chunk, corruption)
+- Concurrency testing
+- Code coverage using gcov/lcov
 
 ---
 
-## 📁 Project Structure
-
-```
-ownsphere/
-│
-├── core/                # C++ storage engine
-│   ├── chunker/
-│   ├── io/
-│   └── encryption/
-│
-├── agent/               # Go service
-│   ├── api/
-│   ├── service/
-│   └── utils/
-│
-├── scripts/             # Setup & test scripts
-└── README.md
-```
+### 📜 Logging System
+- Structured logging
+- Log levels: INFO, ERROR, DEBUG
+- Console + file logging
+- Thread-safe logging
 
 ---
 
-## 🔌 API Endpoints (Go Agent)
-
-### 1. Upload File
-
-```
-POST /upload
-```
-
-**Description:**
-Uploads a file → splits into chunks → stores via core engine.
-
-**Request:**
-
-* multipart/form-data
-* file: binary
-
-**Response:**
-
-```json
-{
-  "status": "success",
-  "file_id": "abc123"
-}
-```
+### 🌐 Go Agent (API Layer)
+- File upload API
+- File download API
+- Health check endpoint
 
 ---
 
-### 2. Download File
+## ✅ What is Handled
 
-```
-GET /download/{file_id}
-```
-
-**Description:**
-Reconstructs file from chunks and returns it.
-
----
-
-### 3. Health Check
-
-```
-GET /health
-```
-
-**Response:**
-
-```json
-{
-  "status": "ok"
-}
-```
+- File storage and retrieval
+- Chunk-based storage architecture
+- Metadata consistency (atomic writes)
+- Failure detection:
+  - Missing chunk
+  - Corrupted chunk
+- Rollback on failure
+- Empty file handling
+- File overwrite handling
+- CLI-based interaction
+- API-based interaction (Go agent)
+- Logging and observability
+- Test coverage and validation
 
 ---
 
-### 4. Delete File (Planned)
+## ❌ Not Handled Yet
 
-```
-DELETE /file/{file_id}
-```
+### 🔴 Data Safety
+- Crash recovery system
+- Write-Ahead Logging (WAL)
+- Atomic chunk writes
+
+### 🟠 Reliability
+- Data replication (RAID / multi-copy)
+- Garbage collection (orphan chunk cleanup)
+- Metadata corruption detection
+
+### 🟡 Concurrency
+- Full thread-safe storage operations
+
+### 🔐 Security
+- Strong encryption (AES-256 planned)
+- Authentication / access control
+
+### 🌍 Scalability
+- Distributed storage (multi-node)
+- Sharding and load balancing
+
+### 📊 Observability
+- Metrics (latency, storage usage, failure rate)
+- Monitoring system
 
 ---
 
-## 🧪 Testing Commands
+## ⚙️ Setup & Installation
 
-### ▶️ Run Go Agent
+### 🧰 System Dependencies (Ubuntu)
 
 ```bash
-cd agent
-go run main.go
-```
-
----
-
-### 📤 Test Upload API
-
-```bash
-curl -X POST http://localhost:8080/upload \
-  -F "file=@testfile.txt"
-```
-
----
-
-### 📥 Test Download API
-
-```bash
-curl -O http://localhost:8080/download/abc123
-```
-
----
-
-### ❤️ Health Check
-
-```bash
-curl http://localhost:8080/health
-```
-
----
-
-## ⚙️ Build Instructions
-
-### Build C++ Core
-
-```bash
-cd core
-mkdir build && cd build
-cmake ..
-make
-```
-
----
-
-### Run Go Agent
-
-```bash
-cd agent
-go mod tidy
-go run main.go
-```
-
----
-
-## 🛠️ Tech Stack
-
-* C++ → Core storage engine
-* Go → Agent / API layer
-* Linux → Development environment
-* Docker → (Planned)
-
----
-
-## 🚧 Upcoming Features
-
-* RAID implementation (0,1)
-* Encryption layer (AES-256)
-* Distributed node sync
-* Metadata database integration
-* Web dashboard
-
----
-
-## 🧠 Design Goals
-
-* High performance (low latency I/O)
-* Scalability (multi-node support)
-* Fault tolerance
-* Secure storage
-
----
-
-## 🤝 Contribution
-
-This is an experimental system under active development.
-
----
-
-## 📌 Notes
-
-* This is NOT production ready yet
-* Focus is on learning + building core infra
-
----
-
-## 🚀 Author
-
-Dinesh Kumar
-OwnSphere Project
+sudo apt update
+sudo apt install -y \
+    build-essential \
+    cmake \
+    g++ \
+    git \
+    lcov \
+    gcovr

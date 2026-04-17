@@ -5,76 +5,95 @@
 #include <filesystem>
 
 // ================= SAVE METADATA =================
-bool MetadataManager::saveMetadata(const std::string &fileId,
-                                   const std::vector<ChunkInfo> &chunks,
-                                   size_t size)
+bool MetadataManager::saveMetadata(const std::string& fileId,
+                                   const std::vector<ChunkInfo>& chunks,
+                                   size_t fileSize)
 {
-    std::filesystem::create_directories("data/metadata");
+    std::string dir = "data/metadata/";
+    std::filesystem::create_directories(dir);
 
-    std::ofstream out("data/metadata/" + fileId + ".meta");
-    if (!out.is_open())
-    {
-        std::cerr << "ERROR: Cannot write metadata for file: " << fileId << std::endl;
+    std::string finalPath = dir + fileId + ".meta";
+    std::string tempPath = finalPath + ".tmp";
+
+    // 1. Write to temp file
+    std::ofstream out(tempPath, std::ios::binary);
+    if (!out.is_open()) {
+        std::cerr << "ERROR: Cannot open temp metadata file\n";
         return false;
     }
 
-    out << "{\n";
-    out << "\"file_id\": \"" << fileId << "\",\n";
-    out << "\"size\": " << size << ",\n";
-    out << "\"chunks\": [\n";
-
-    for (size_t i = 0; i < chunks.size(); i++)
-    {
-        out << "{ \"id\": \"" << chunks[i].id
-            << "\", \"checksum\": \"" << chunks[i].checksum << "\" }";
-
-        if (i != chunks.size() - 1)
-            out << ",";
-        out << "\n";
+    // Format:
+    // first line → file size
+    // next lines → chunkId checksum
+    out << fileSize << "\n";
+    for (const auto& chunk : chunks) {
+        out << chunk.id << " " << chunk.checksum << "\n";
     }
 
-    out << "]\n}";
+    // 2. Flush and validate
+    out.flush();
+    if (!out.good()) {
+        std::cerr << "ERROR: Failed writing metadata\n";
+        out.close();
+        std::remove(tempPath.c_str());
+        return false;
+    }
+
+    out.close();
+
+    // 3. Atomic rename
+    try {
+        std::filesystem::rename(tempPath, finalPath);
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR: Atomic rename failed: " << e.what() << "\n";
+        std::remove(tempPath.c_str());
+        return false;
+    }
+
     return true;
 }
 
 // ================= LOAD METADATA =================
 std::vector<ChunkInfo> MetadataManager::loadChunks(const std::string &fileId)
 {
-    std::ifstream in("data/metadata/" + fileId + ".meta");
-
     std::vector<ChunkInfo> chunks;
 
-    if (!in.is_open())
-    {
+    std::string path = "data/metadata/" + fileId + ".meta";
+    std::ifstream in(path);
+
+    if (!in.is_open()) {
         std::cerr << "ERROR: Cannot open metadata for file: " << fileId << std::endl;
         return chunks;
     }
 
-    // Read full file content
-    std::string content((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
+    size_t fileSize;
+    in >> fileSize; // first line
 
-    size_t pos = 0;
+    std::string chunkId, checksum;
 
-    while ((pos = content.find("\"id\"", pos)) != std::string::npos)
-    {
+    while (in >> chunkId >> checksum) {
         ChunkInfo info;
-
-        // Extract ID
-        size_t idStart = content.find("\"", pos + 4) + 1;
-        size_t idEnd = content.find("\"", idStart);
-        info.id = content.substr(idStart, idEnd - idStart);
-
-        // Extract checksum (search AFTER idEnd)
-        size_t checksumKey = content.find("\"checksum\"", idEnd);
-        size_t chkStart = content.find("\"", checksumKey + 10) + 1;
-        size_t chkEnd = content.find("\"", chkStart);
-        info.checksum = content.substr(chkStart, chkEnd - chkStart);
-
+        info.id = chunkId;
+        info.checksum = checksum;
         chunks.push_back(info);
-
-        pos = chkEnd; // move forward
     }
 
     return chunks;
+}
+
+// ================= CLEANUP TEMP FILES =================
+void MetadataManager::cleanupTempFiles()
+{
+    std::string dir = "data/metadata/";
+
+    if (!std::filesystem::exists(dir)) return;
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        std::string path = entry.path().string();
+
+        // C++17 compatible ends_with
+        if (path.size() >= 4 && path.substr(path.size() - 4) == ".tmp") {
+            std::remove(path.c_str());
+        }
+    }
 }

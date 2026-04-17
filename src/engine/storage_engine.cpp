@@ -3,9 +3,8 @@
 #include "metadata_manager.h"
 #include "checksum.h"
 #include "encryption.h"
-
+#include "logger.h"
 #include <fstream>
-#include <iostream>
 #include <filesystem>
 #include <unordered_map>
 #include <mutex>
@@ -37,7 +36,7 @@ bool StorageEngine::storeFile(const std::string &filePath,
     std::ifstream in(filePath, std::ios::binary);
 
     if (!in.is_open()) {
-        std::cerr << "ERROR: Cannot open file: " << filePath << std::endl;
+        LOG_ERROR("Cannot open file: " + filePath);
         return false;
     }
 
@@ -45,6 +44,25 @@ bool StorageEngine::storeFile(const std::string &filePath,
     in.seekg(0, std::ios::end);
     size_t fileSize = in.tellg();
     in.seekg(0);
+
+    // ================= EMPTY FILE =================
+    if (fileSize == 0) {
+        std::vector<ChunkInfo> emptyChunks;
+
+        if (!metadataManager.saveMetadata(fileId, emptyChunks, 0)) {
+            LOG_ERROR("Failed to save metadata for empty file: " + fileId);
+            return false;
+        }
+
+        updateProgress(fileId, 100);
+
+        if (progressCallback) {
+            progressCallback(100);
+        }
+
+        LOG_INFO("Stored empty file: " + fileId);
+        return true;
+    }
 
     const size_t CHUNK_SIZE = 4 * 1024 * 1024;
 
@@ -68,6 +86,7 @@ bool StorageEngine::storeFile(const std::string &filePath,
         std::vector<char> encryptedData = encryptData(buffer, key);
 
         if (!chunkManager.writeChunk(chunkId, encryptedData)) {
+            LOG_ERROR("Failed to write chunk: " + chunkId);
             return false;
         }
 
@@ -79,7 +98,7 @@ bool StorageEngine::storeFile(const std::string &filePath,
 
         chunkInfos.push_back(info);
 
-        // ===== Progress update =====
+        // ===== Progress =====
         processed += bytesRead;
         int percent = static_cast<int>((processed * 100) / fileSize);
 
@@ -88,15 +107,18 @@ bool StorageEngine::storeFile(const std::string &filePath,
         if (progressCallback) {
             progressCallback(percent);
         }
+
+        LOG_DEBUG("Processed chunk: " + chunkId);
     }
 
     if (!metadataManager.saveMetadata(fileId, chunkInfos, fileSize)) {
+        LOG_ERROR("Failed to save metadata: " + fileId);
         return false;
     }
 
     updateProgress(fileId, 100);
 
-    std::cout << "\nStored file: " << fileId << std::endl;
+    LOG_INFO("Stored file: " + fileId);
     return true;
 }
 
@@ -108,16 +130,38 @@ bool StorageEngine::retrieveFile(const std::string &fileId,
     ChunkManager chunkManager;
     MetadataManager metadataManager;
 
+    std::string metaPath = "data/metadata/" + fileId + ".meta";
+
+    if (!std::filesystem::exists(metaPath)) {
+        LOG_ERROR("File does not exist: " + fileId);
+        return false;
+    }
+
     auto chunks = metadataManager.loadChunks(fileId);
 
+    // ===== EMPTY FILE =====
     if (chunks.empty()) {
-        std::cerr << "ERROR: No chunks found\n";
-        return false;
+        std::ofstream out(outputPath, std::ios::binary);
+        if (!out.is_open()) {
+            LOG_ERROR("Cannot open output file: " + outputPath);
+            return false;
+        }
+
+        out.close();
+
+        updateProgress(fileId, 100);
+
+        if (progressCallback) {
+            progressCallback(100);
+        }
+
+        LOG_INFO("Retrieved empty file: " + outputPath);
+        return true;
     }
 
     std::ofstream out(outputPath, std::ios::binary);
     if (!out.is_open()) {
-        std::cerr << "ERROR: Cannot open output file\n";
+        LOG_ERROR("Cannot open output file: " + outputPath);
         return false;
     }
 
@@ -128,18 +172,20 @@ bool StorageEngine::retrieveFile(const std::string &fileId,
         std::string key = "mysecretkey";
 
         auto encryptedData = chunkManager.readChunk(chunk.id);
-        if (encryptedData.empty()) return false;
+        if (encryptedData.empty()) {
+            LOG_ERROR("Missing chunk: " + chunk.id);
+            return false;
+        }
 
         auto data = decryptData(encryptedData, key);
 
         if (computeChecksum(data) != chunk.checksum) {
-            std::cerr << "ERROR: Data corruption\n";
+            LOG_ERROR("Data corruption in chunk: " + chunk.id);
             return false;
         }
 
         out.write(data.data(), data.size());
 
-        // ===== Progress update =====
         processedChunks++;
         int percent = (processedChunks * 100) / totalChunks;
 
@@ -148,9 +194,11 @@ bool StorageEngine::retrieveFile(const std::string &fileId,
         if (progressCallback) {
             progressCallback(percent);
         }
+
+        LOG_DEBUG("Read chunk: " + chunk.id);
     }
 
-    std::cout << "\nFile reconstructed: " << outputPath << std::endl;
+    LOG_INFO("File reconstructed: " + outputPath);
     return true;
 }
 
@@ -160,22 +208,18 @@ bool StorageEngine::deleteFile(const std::string& fileId) {
     ChunkManager chunkManager;
 
     std::vector<ChunkInfo> chunks = metadataManager.loadChunks(fileId);
-    if (chunks.empty()) {
-        std::cerr << "ERROR: No chunks found for file: " << fileId << std::endl;
-        return false;
+
+    if (!chunks.empty()) {
+        for (const auto& chunk : chunks) {
+            std::string path = "data/chunks/" + chunk.id;
+            std::remove(path.c_str());
+        }
     }
 
-    // delete chunks
-    for (const auto& chunk : chunks) {
-        std::string path = "data/chunks/" + chunk.id;
-        std::remove(path.c_str());
-    }
-
-    // delete metadata
     std::string metaPath = "data/metadata/" + fileId + ".meta";
     std::remove(metaPath.c_str());
 
-    std::cout << "Deleted file: " << fileId << std::endl;
+    LOG_INFO("Deleted file: " + fileId);
     return true;
 }
 
@@ -188,12 +232,12 @@ std::vector<std::string> StorageEngine::listFiles() {
         for (const auto& entry : std::filesystem::directory_iterator(path)) {
             std::string filename = entry.path().filename().string();
 
-            if (filename.size() > 5) { // remove ".meta"
+            if (filename.size() > 5) {
                 files.push_back(filename.substr(0, filename.size() - 5));
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "ERROR: Cannot list files: " << e.what() << std::endl;
+        LOG_ERROR(std::string("Cannot list files: ") + e.what());
     }
 
     return files;
