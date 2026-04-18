@@ -12,6 +12,15 @@
 static std::unordered_map<std::string, int> progressMap;
 static std::mutex progressMutex;
 
+std::string formatTime(std::chrono::system_clock::time_point tp) {
+    std::time_t time = std::chrono::system_clock::to_time_t(tp);
+    std::tm *tm = std::localtime(&time);
+
+    std::ostringstream oss;
+    oss << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
+    return oss.str();
+}
+
 // ======================= PROGRESS =======================
 static void updateProgress(const std::string& fileId, int percent) {
     std::lock_guard<std::mutex> lock(progressMutex);
@@ -26,10 +35,12 @@ int StorageEngine::getProgress(const std::string& fileId) {
 }
 
 // ======================= WRITE =======================
-bool StorageEngine::storeFile(const std::string &filePath,
-                              const std::string &fileId,
-                              ProgressCallback progressCallback)
-{
+bool StorageEngine::storeFile(const std::string &filePath, const std::string &fileId, ProgressCallback progressCallback){
+
+    // ✅ START TIME
+    auto startTime = std::chrono::system_clock::now();
+    auto startHighRes = std::chrono::high_resolution_clock::now();
+
     ChunkManager chunkManager;
     MetadataManager metadataManager;
 
@@ -40,12 +51,10 @@ bool StorageEngine::storeFile(const std::string &filePath,
         return false;
     }
 
-    // Get file size
     in.seekg(0, std::ios::end);
     size_t fileSize = in.tellg();
     in.seekg(0);
 
-    // ================= EMPTY FILE =================
     if (fileSize == 0) {
         std::vector<ChunkInfo> emptyChunks;
 
@@ -55,12 +64,19 @@ bool StorageEngine::storeFile(const std::string &filePath,
         }
 
         updateProgress(fileId, 100);
+        if (progressCallback) progressCallback(100);
 
-        if (progressCallback) {
-            progressCallback(100);
-        }
+        // ✅ END TIME
+        auto endTime = std::chrono::system_clock::now();
+        auto endHighRes = std::chrono::high_resolution_clock::now();
+
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endHighRes - startHighRes);
 
         LOG_INFO("Stored empty file: " + fileId);
+        LOG_INFO("Start Time: " + formatTime(startTime));
+        LOG_INFO("End Time: " + formatTime(endTime));
+        LOG_INFO("Time Taken: " + std::to_string(duration.count()) + " ms");
+
         return true;
     }
 
@@ -98,17 +114,11 @@ bool StorageEngine::storeFile(const std::string &filePath,
 
         chunkInfos.push_back(info);
 
-        // ===== Progress =====
         processed += bytesRead;
         int percent = static_cast<int>((processed * 100) / fileSize);
 
         updateProgress(fileId, percent);
-
-        if (progressCallback) {
-            progressCallback(percent);
-        }
-
-        LOG_DEBUG("Processed chunk: " + chunkId);
+        if (progressCallback) progressCallback(percent);
     }
 
     if (!metadataManager.saveMetadata(fileId, chunkInfos, fileSize)) {
@@ -118,14 +128,26 @@ bool StorageEngine::storeFile(const std::string &filePath,
 
     updateProgress(fileId, 100);
 
-    LOG_INFO("Stored file: " + fileId);
+    // ✅ END TIME
+    auto endTime = std::chrono::system_clock::now();
+    auto endHighRes = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endHighRes - startHighRes);
+
+    // ✅ LOGS
+    LOG_INFO("Stored file - ID: " + fileId);
+    LOG_INFO("Stored file - Path: " + filePath);
+    LOG_INFO("Stored file - Size: " + std::to_string(fileSize) + " bytes");
+    LOG_INFO("Stored file - Chunks: " + std::to_string(chunkInfos.size()));
+
+    LOG_INFO("Start Time: " + formatTime(startTime));
+    LOG_INFO("End Time: " + formatTime(endTime));
+    LOG_INFO("Time Taken: " + std::to_string(duration.count()) + " ms");
+
     return true;
 }
-
 // ======================= READ =======================
-bool StorageEngine::retrieveFile(const std::string &fileId,
-                                 const std::string &outputPath,
-                                 ProgressCallback progressCallback)
+bool StorageEngine::retrieveFile(const std::string &fileId,  const std::string &outputPath, ProgressCallback progressCallback)
 {
     ChunkManager chunkManager;
     MetadataManager metadataManager;
